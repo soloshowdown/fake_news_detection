@@ -1,48 +1,63 @@
 import streamlit as st
 import joblib
+from lime.lime_text import LimeTextExplainer
+from sklearn.pipeline import make_pipeline
 import re
 
-# Load model + vectorizer
-model = joblib.load("logreg_model.pkl")
+# Load model and vectorizer
+model = joblib.load("fake_news_model.pkl")
 tfidf = joblib.load("tfidf_vectorizer.pkl")
 
-# Text cleaning
-def clean_text(s):
-    s = s.lower()
-    s = re.sub(r"[^a-z0-9\s]", " ", s)
-    s = re.sub(r"\s+", " ", s).strip()
-    return s
+# Create pipeline for LIME
+pipeline = make_pipeline(tfidf, model)
 
-# ---------------- Interface ---------------- #
-st.set_page_config(page_title="Fake News Detector", page_icon="📰", layout="centered")
+# Initialize LIME explainer
+explainer = LimeTextExplainer(class_names=["Fake", "Real"])
 
-st.title("📰 Fake News Detector")
-st.markdown("Check whether a news article is **Real or Fake** using an NLP model (Logistic Regression).")
-
-# Input fields
-st.subheader("Enter News Details")
-title_input = st.text_input("News Title", placeholder="e.g. Breaking: New vaccine approved for use")
-text_input = st.text_area("News Content", placeholder="Paste the full article text here...")
-
-# Button
-if st.button("🔍 Check News"):
-    if title_input.strip() == "" and text_input.strip() == "":
-        st.warning("⚠️ Please enter a title or content.")
-    else:
-        # Combine title + text
-        combined_input = clean_text(title_input + " " + text_input)
-        features = tfidf.transform([combined_input])
-
-        # Predict
-        prediction = model.predict(features)[0]
-        proba = model.predict_proba(features)[0]
-
-        # Display result
-        st.markdown("---")
-        if prediction == 1:
-            st.success(f"✅ **Real News** (Confidence: {proba[1]*100:.2f}%)")
+# Function to highlight words
+def highlight_text(text, exp):
+    highlighted = text
+    for word, weight in exp.as_list():
+        # Escape regex special characters in word
+        safe_word = re.escape(word)
+        if weight > 0:
+            color = "green"   # Supports Real
         else:
-            st.error(f"❌ **Fake News** (Confidence: {proba[0]*100:.2f}%)")
+            color = "red"     # Supports Fake
+        highlighted = re.sub(
+            safe_word,
+            f"<span style='background-color:{color}; color:white; padding:2px;'>{word}</span>",
+            highlighted,
+            flags=re.IGNORECASE
+        )
+    return highlighted
+
+# Streamlit App
+st.title("📰 Fake News Detection with Explainable AI")
+
+title = st.text_input("Enter News Title")
+content = st.text_area("Enter News Content")
+
+if st.button("Predict"):
+    if title or content:
+        combined_input = title + " " + content
+        prediction = model.predict(tfidf.transform([combined_input]))[0]
+        proba = model.predict_proba(tfidf.transform([combined_input]))[0]
+
+        label = "🟥 Fake News" if prediction == 0 else "🟩 Real News"
+        st.write(f"### Prediction: {label}")
+        st.write(f"Confidence: {max(proba)*100:.2f}%")
         
-        st.markdown("---")
-        st.caption("Model: Logistic Regression with TF-IDF features")
+        # Save input for explanation
+        st.session_state['last_input'] = combined_input
+    else:
+        st.warning("Please enter some text.")
+
+# Explain Prediction
+if 'last_input' in st.session_state and st.button("Explain Prediction"):
+    text = st.session_state['last_input']
+    exp = explainer.explain_instance(text, pipeline.predict_proba, num_features=10)
+
+    st.write("### Explanation (word highlights):")
+    highlighted_text = highlight_text(text, exp)
+    st.markdown(highlighted_text, unsafe_allow_html=True)
