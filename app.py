@@ -3,6 +3,10 @@ import joblib
 from lime.lime_text import LimeTextExplainer
 from sklearn.pipeline import make_pipeline
 import re
+import json
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
 
 # Load model and vectorizer
 model = joblib.load("fake_news_model.pkl")
@@ -18,12 +22,8 @@ explainer = LimeTextExplainer(class_names=["Fake", "Real"])
 def highlight_text(text, exp):
     highlighted = text
     for word, weight in exp.as_list():
-        # Escape regex special characters in word
         safe_word = re.escape(word)
-        if weight > 0:
-            color = "green"   # Supports Real
-        else:
-            color = "red"     # Supports Fake
+        color = "green" if weight > 0 else "red"
         highlighted = re.sub(
             safe_word,
             f"<span style='background-color:{color}; color:white; padding:2px;'>{word}</span>",
@@ -48,7 +48,6 @@ if st.button("Predict"):
         st.write(f"### Prediction: {label}")
         st.write(f"Confidence: {max(proba)*100:.2f}%")
         
-        # Save input for explanation
         st.session_state['last_input'] = combined_input
     else:
         st.warning("Please enter some text.")
@@ -61,3 +60,28 @@ if 'last_input' in st.session_state and st.button("Explain Prediction"):
     st.write("### Explanation (word highlights):")
     highlighted_text = highlight_text(text, exp)
     st.markdown(highlighted_text, unsafe_allow_html=True)
+
+# Sidebar: Metrics
+st.sidebar.title("📊 Model Metrics")
+
+try:
+    with open("metrics.json", "r") as f:
+        metrics = json.load(f)
+
+    st.sidebar.write(f"**Accuracy:** {metrics['accuracy']:.2f}")
+    st.sidebar.write(f"**Precision:** {metrics['precision']:.2f}")
+    st.sidebar.write(f"**Recall:** {metrics['recall']:.2f}")
+    st.sidebar.write(f"**F1 Score:** {metrics['f1_score']:.2f}")
+    st.sidebar.write(f"**ROC-AUC:** {metrics['roc_auc']:.2f}")
+
+    # Confusion Matrix Heatmap
+    st.sidebar.write("### Confusion Matrix")
+    cm = np.array(metrics["confusion_matrix"])
+    fig, ax = plt.subplots()
+    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=["Fake", "Real"], yticklabels=["Fake", "Real"], ax=ax)
+    ax.set_xlabel("Predicted")
+    ax.set_ylabel("Actual")
+    st.sidebar.pyplot(fig)
+
+except:
+    st.sidebar.warning("Metrics not found. Train the model first.")
