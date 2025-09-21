@@ -58,21 +58,29 @@ def load_models():
         tokenizer = tokenizer_from_json(tok_json)
         lstm = load_model("models/lstm_model.h5")
         models['LSTM (Keras)'] = {"type": "lstm", "model": lstm, "tokenizer": tokenizer, "max_len": 200}
-    # DistilBERT
-    if os.path.exists("models/distilbert_model") and os.path.exists("models/distilbert_tokenizer"):
-        try:
+
+    # DistilBERT (local if available, else HuggingFace)
+    try:
+        if os.path.exists("models/distilbert_model") and os.path.exists("models/distilbert_tokenizer"):
             bert_tokenizer = DistilBertTokenizerFast.from_pretrained("models/distilbert_tokenizer")
             bert_model = DistilBertForSequenceClassification.from_pretrained("models/distilbert_model")
-            bert_model.eval()
-            models['DistilBERT'] = {"type": "transformer", "model": bert_model, "tokenizer": bert_tokenizer}
-        except Exception as e:
-            print("Transformer load failed:", e)
+        else:
+            bert_tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
+            bert_model = DistilBertForSequenceClassification.from_pretrained(
+                "distilbert-base-uncased", num_labels=2
+            )
+        bert_model.eval()
+        models['DistilBERT'] = {"type": "transformer", "model": bert_model, "tokenizer": bert_tokenizer}
+    except Exception as e:
+        print("Transformer load failed:", e)
 
     return models
 
 models = load_models()
 
-# Build simple predict_proba wrappers for LIME
+# -------------------------
+# Prediction wrapper
+# -------------------------
 def predict_proba_for_model(name, texts):
     entry = models[name]
     t = [clean_text(x) for x in texts]
@@ -81,14 +89,13 @@ def predict_proba_for_model(name, texts):
         tfidf = entry['tfidf']
         model = entry['model']
         X = tfidf.transform(t)
-        return model.predict_proba(X)  # shape (n,2)
+        return model.predict_proba(X)
 
     if entry['type'] == "lstm":
         tokenizer = entry['tokenizer']
         seqs = tokenizer.texts_to_sequences(t)
         Xpad = pad_sequences(seqs, maxlen=entry.get("max_len",200), padding='post', truncating='post')
         probs = entry['model'].predict(Xpad).ravel()
-        # return shape (n,2): probs for class 0 and 1
         probs_stack = np.vstack([1-probs, probs]).T
         return probs_stack
 
@@ -104,7 +111,9 @@ def predict_proba_for_model(name, texts):
 
     raise ValueError("Unknown model type")
 
-# LIME explainer (we'll use class names Fake=0, Real=1)
+# -------------------------
+# LIME explainer
+# -------------------------
 lime_explainer = LimeTextExplainer(class_names=["Fake", "Real"])
 
 # -------------------------
@@ -118,7 +127,7 @@ if len(model_names) == 0:
 
 selected_model = st.sidebar.selectbox("Select model", model_names)
 
-# Load metrics per-model file
+# Load metrics
 metrics = {}
 metrics_file = "models/metrics_all.json"
 if os.path.exists(metrics_file):
@@ -126,8 +135,6 @@ if os.path.exists(metrics_file):
         metrics = json.load(f)
 
 st.sidebar.markdown("### Model Metrics (selected)")
-m = metrics.get(selected_model.lower().replace(" ", "_"), None)
-# metrics_all.json uses keys like 'logistic_regression', 'multinomial_nb', 'lstm', 'distilbert'
 key_map = {
     "Logistic Regression": "logistic_regression",
     "Multinomial NB": "multinomial_nb",
@@ -145,7 +152,8 @@ if metrics and key_map[selected_model] in metrics:
     if 'confusion_matrix' in mapped:
         cm = np.array(mapped['confusion_matrix'])
         fig, ax = plt.subplots(figsize=(3,3))
-        sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=["Fake","Real"], yticklabels=["Fake","Real"], ax=ax)
+        sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
+                    xticklabels=["Fake","Real"], yticklabels=["Fake","Real"], ax=ax)
         ax.set_xlabel("Predicted")
         ax.set_ylabel("Actual")
         st.sidebar.pyplot(fig)
@@ -178,9 +186,7 @@ with col2:
                     st.success(f"{label} (Confidence: {conf*100:.2f}%)")
                 else:
                     st.error(f"{label} (Confidence: {conf*100:.2f}%)")
-                # store for explanation button
                 st.session_state["last_input"] = combined
-                st.session_state["last_pred_probs"] = probs
             except Exception as e:
                 st.error(f"Prediction failed: {e}")
 
@@ -190,11 +196,9 @@ with col2:
         else:
             text_to_explain = st.session_state["last_input"]
             try:
-                # LIME expects a function that returns proba given list[str]
                 predict_fn = lambda texts: predict_proba_for_model(selected_model, texts)
                 exp = lime_explainer.explain_instance(text_to_explain, predict_fn, num_features=10)
 
-                # highlight words in text
                 def highlight_text(text, exp):
                     highlighted = text
                     for word, weight in exp.as_list():
@@ -209,14 +213,12 @@ with col2:
                 st.write("### Highlights (green supports Real, red supports Fake)")
                 st.markdown(highlight_text(text_to_explain, exp), unsafe_allow_html=True)
 
-                # Also show contribution table and bar chart
                 contrib = exp.as_list()
                 dfc = pd.DataFrame(contrib, columns=["word","weight"])
                 st.write("#### Contributions")
                 st.dataframe(dfc)
 
                 fig, ax = plt.subplots()
-                dfc['sign'] = dfc['weight'].apply(lambda x: 'pos' if x>0 else 'neg')
                 ax.barh(dfc['word'], dfc['weight'])
                 ax.set_xlabel("Contribution (positive -> Real)")
                 st.pyplot(fig)
@@ -224,5 +226,4 @@ with col2:
             except Exception as e:
                 st.error(f"Explanation failed: {e}")
 
-# Footer
-st.caption("Models trained: Logistic Regression, Multinomial NB, LSTM (Keras), DistilBERT (optional). LIME used for per-prediction explainability.")
+st.caption("Models trained: Logistic Regression, Multinomial NB, LSTM (Keras), DistilBERT (pretrained fallback). LIME used for per-prediction explainability.")
