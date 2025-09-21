@@ -21,27 +21,7 @@ Users can test news articles (title + content), choose a model, and see both pre
 - ✅ **Interactive Streamlit Interface**  
   - Select model from sidebar  
   - View model metrics (Accuracy, Precision, Recall, F1, ROC-AUC)  
-  - Visualize confusion matrices  
-
----
-
-## 📂 Project Structure
-fake-news-detection/
-│── app.py # Streamlit app (main interface)
-│── train_all.py # Script to train & save all models
-│── requirements.txt # Dependencies
-│── README.md # Project documentation
-│── /models/ # Saved models + vectorizers + metrics
-│ ├── logreg_model.pkl
-│ ├── nb_model.pkl
-│ ├── tfidf_vectorizer.pkl
-│ ├── lstm_model.h5
-│ ├── tokenizer.json
-│ ├── distilbert_model/ # HuggingFace saved model
-│ ├── distilbert_tokenizer/ # HuggingFace saved tokenizer
-│ └── metrics_all.json
-│── /data/ # Dataset (e.g., fake_news_dataset.csv)
-
+  - Visualize confusion matrices  S
 
 ---
 
@@ -58,47 +38,47 @@ fake-news-detection/
 
 # requirements.txt
 
-numpy
-pandas
-scikit-learn
-matplotlib
-seaborn
-nltk
-flask
-lime
-tensorflow==2.15.0
-torch
-transformers==4.41.2
-tf-keras
-joblib
+        numpy
+        pandas
+        scikit-learn
+        matplotlib
+        seaborn
+        nltk
+        flask
+        lime
+        tensorflow==2.15.0
+        torch
+        transformers==4.41.2
+        tf-keras
+        joblib
 
 
 
-🔍 Explainable AI (LIME)
+# 🔍 Explainable AI (LIME)
 
-Green highlights → words supporting "Real News"
+        Green highlights → words supporting "Real News"
 
-Red highlights → words supporting "Fake News"
+        Red highlights → words supporting "Fake News"
 
-Also includes:
+        Also includes:
 
-Contribution weight table
+        Contribution weight table
 
-Bar chart of influential words
+        Bar chart of influential words
 
 
-📈 Results
+# 📈 Results
 
-Each model is evaluated with:
+        Each model is evaluated with:
 
-Accuracy
+        Accuracy
 
-Precision
+        Precision
 
-Recall
+        Recall
 
-F1-score
+        F1-score
 
-ROC-AUC
+        ROC-AUC
 
-Confusion Matrix (visualized in sidebar)
+        Confusion Matrix (visualized in sidebar)
