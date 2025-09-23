@@ -22,49 +22,19 @@ import json as _json
 from transformers import DistilBertTokenizerFast, DistilBertForSequenceClassification
 import torch
 
-# For stemming & lemmatization
-import nltk
-from nltk.stem import PorterStemmer, WordNetLemmatizer
-from nltk.corpus import wordnet
-
-# Download necessary NLTK resources
-nltk.download("punkt")
-nltk.download("wordnet")
-nltk.download("omw-1.4")
-
-stemmer = PorterStemmer()
-lemmatizer = WordNetLemmatizer()
-
 st.set_page_config(page_title="Fake News Detector (Multi-model + XAI)", layout="wide")
 
 # -------------------------
-# Helpers (with stemming & lemmatization)
+# Helpers
 # -------------------------
-def clean_text(s, method="lemmatize"):
-    """
-    Clean text + apply stemming or lemmatization.
-    method: 'stem', 'lemmatize', or 'none'
-    """
+def clean_text(s):
     if not isinstance(s, str):
         return ""
-
-    # Basic cleaning
     s = s.lower()
     s = re.sub(r"[^a-z0-9\s]", " ", s)
     s = re.sub(r"\s+", " ", s).strip()
+    return s
 
-    tokens = nltk.word_tokenize(s)
-
-    if method == "stem":
-        tokens = [stemmer.stem(word) for word in tokens]
-    elif method == "lemmatize":
-        tokens = [lemmatizer.lemmatize(word) for word in tokens]
-
-    return " ".join(tokens)
-
-# -------------------------
-# Load models
-# -------------------------
 def load_models():
     models = {}
     # Logistic Reg + TFIDF
@@ -111,9 +81,9 @@ models = load_models()
 # -------------------------
 # Prediction wrapper
 # -------------------------
-def predict_proba_for_model(name, texts, method="lemmatize"):
+def predict_proba_for_model(name, texts):
     entry = models[name]
-    t = [clean_text(x, method=method) for x in texts]
+    t = [clean_text(x) for x in texts]
 
     if entry['type'] == "sklearn":
         tfidf = entry['tfidf']
@@ -147,23 +117,15 @@ def predict_proba_for_model(name, texts, method="lemmatize"):
 lime_explainer = LimeTextExplainer(class_names=["Fake", "Real"])
 
 # -------------------------
-# Sidebar: model selection + preprocessing + metrics
+# Sidebar: model selection + metrics
 # -------------------------
-st.sidebar.title("Settings")
-
-# Model selection
+st.sidebar.title("Model & Info")
 model_names = list(models.keys())
 if len(model_names) == 0:
     st.sidebar.warning("No models found in /models. Run train_all.py first.")
     st.stop()
-selected_model = st.sidebar.selectbox("Select model", model_names)
 
-# Preprocessing method
-preprocess_method = st.sidebar.selectbox(
-    "Text Preprocessing",
-    options=["lemmatize", "stem", "none"],
-    index=0
-)
+selected_model = st.sidebar.selectbox("Select model", model_names)
 
 # Load metrics
 metrics = {}
@@ -202,7 +164,7 @@ else:
 # Main UI
 # -------------------------
 st.title("📰 Fake News Detector — Multi-Model + Explainability")
-st.write("Choose a model & preprocessing from the sidebar, input Title and Content, then Predict. Use Explain to highlight influential words.")
+st.write("Choose a model from the sidebar, input Title and Content, then Predict. Use Explain to highlight influential words.")
 
 col1, col2 = st.columns([3,1])
 with col1:
@@ -214,9 +176,9 @@ with col2:
         if not (title_input.strip() or content_input.strip()):
             st.warning("Enter title or content.")
         else:
-            combined = (title_input or "") + " " + (content_input or "")
+            combined = clean_text((title_input or "") + " " + (content_input or ""))
             try:
-                probs = predict_proba_for_model(selected_model, [combined], method=preprocess_method)[0]
+                probs = predict_proba_for_model(selected_model, [combined])[0]
                 pred = int(np.argmax(probs))
                 conf = probs[pred]
                 label = "✅ Real News" if pred == 1 else "❌ Fake News"
@@ -234,7 +196,7 @@ with col2:
         else:
             text_to_explain = st.session_state["last_input"]
             try:
-                predict_fn = lambda texts: predict_proba_for_model(selected_model, texts, method=preprocess_method)
+                predict_fn = lambda texts: predict_proba_for_model(selected_model, texts)
                 exp = lime_explainer.explain_instance(text_to_explain, predict_fn, num_features=10)
 
                 def highlight_text(text, exp):
@@ -264,4 +226,4 @@ with col2:
             except Exception as e:
                 st.error(f"Explanation failed: {e}")
 
-st.caption("Models trained: Logistic Regression, Multinomial NB, LSTM (Keras), DistilBERT. LIME used for explainability. Preprocessing: Stemming or Lemmatization.")
+st.caption("Models trained: Logistic Regression, Multinomial NB, LSTM (Keras), DistilBERT (pretrained fallback). LIME used for per-prediction explainability.")
