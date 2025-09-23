@@ -82,3 +82,15 @@ Users can test news articles (title + content), choose a model, and see both pre
         ROC-AUC
 
         Confusion Matrix (visualized in sidebar)
+
+
+## Examples:
+      Title: "Aliens land in New York to negotiate with humans"
+      Content: "Breaking news: Sources claim that extraterrestrials have landed in Manhattan and are holding talks with world leaders..."
+
+      Title: "Government announces new education policy reforms"
+      Content: "The Ministry of Education has introduced significant changes to the national curriculum with a focus on digital literacy..."
+
+      
+
+        
